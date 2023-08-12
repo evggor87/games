@@ -1,17 +1,15 @@
 import asyncio
 import logging
-
 from aiogram import Bot, Dispatcher
-
 from config import TOKEN
 from app.handlers.user import router
 from app.handlers.admin import admin
-from app.database.models import create_base
+from app.database.models import async_main
 
 
 async def main():
 
-    await create_base()
+    await async_main()
     bot = Bot(token=TOKEN, parse_mode='HTML')
     dp = Dispatcher()
     dp.include_routers(router, admin)

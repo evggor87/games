@@ -1,14 +1,16 @@
-from datetime import datetime
-from turtle import back
-from sqlalchemy import ForeignKey, String, create_engine, ForeignKey
-from sqlalchemy.orm import sessionmaker, DeclarativeBase, Mapped, mapped_column, relationship
-from config import SQLALCHEMY_URL, SQLALCHEMY_ECHO
-
-engine = create_engine(url=SQLALCHEMY_URL, echo=SQLALCHEMY_ECHO)
-Session = sessionmaker(engine)
+from typing import List
+from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
-class Base(DeclarativeBase):
+engine = create_async_engine("sqlite+aiosqlite:///db.sqlite3", echo=False)
+async_session = async_sessionmaker(engine)
+
+
+class Base(AsyncAttrs, DeclarativeBase):
     pass
 
 
@@ -16,17 +18,21 @@ class User(Base):
     __tablename__ = 'users'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id: Mapped[int]
+    tg_id = mapped_column(BigInteger)
     name: Mapped[str] = mapped_column(String(32))
 
-    orders: Mapped['Order'] = relationship(back_populates='user')
+    def __repr__(self):
+        return f'id:{self.id}; tg_id:{self.tg_id}; name:{self.name}'
 
 
 class Banned(Base):
     __tablename__ = 'banned'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id: Mapped[int]
+    tg_id = mapped_column(BigInteger)
+
+    def __repr__(self):
+        return f'id:{self.id}; tg_id:{self.tg_id}'
 
 
 class Platform(Base):
@@ -35,30 +41,10 @@ class Platform(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(32))
 
-    consoles: Mapped['Console'] = relationship(back_populates='platform')
+    games: Mapped[List['Game']] = relationship(back_populates='platform', cascade='all, delete')
 
-
-class Console(Base):
-    __tablename__ = 'consoles'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(32))
-    platform_id: Mapped[int] = mapped_column(ForeignKey('platforms.id'))
-
-    platform: Mapped['Platform'] = relationship(back_populates='consoles')
-    regions: Mapped['Region'] = relationship(back_populates='console')
-    games: Mapped['Game'] = relationship(back_populates='console')
-
-
-class Region(Base):
-    __tablename__ = 'regions'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(32))
-    console_id: Mapped[int] = mapped_column(ForeignKey('consoles.id'))
-
-    console: Mapped['Console'] = relationship(back_populates='regions')
-    games: Mapped['Game'] = relationship(back_populates='region')
+    def __repr__(self):
+        return f'id:{self.id}; name:{self.name}'
 
 
 class Game(Base):
@@ -66,31 +52,21 @@ class Game(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(32))
-    region_id: Mapped[int] = mapped_column(ForeignKey('regions.id'))
-    console_id: Mapped[int] = mapped_column(ForeignKey('consoles.id'))
+    platform_id: Mapped[int] = mapped_column(ForeignKey('platforms.id', ondelete='CASCADE'))
+    region: Mapped[str] = mapped_column(String(32))
     price: Mapped[int]
-    sealed: Mapped[bool]
-    for_sale: Mapped[bool]
+    condition: Mapped[str]
     desc: Mapped[str]
+    photos: Mapped[str]
+    amount: Mapped[int]
+    for_sale: Mapped[bool]
 
-    region: Mapped['Region'] = relationship(back_populates='games')
-    console: Mapped['Console'] = relationship(back_populates='games')
-    order: Mapped['Order'] = relationship(back_populates='game')
+    platform: Mapped[Platform] = relationship(back_populates='games')
 
-
-class Order(Base):
-    __tablename__ = 'orders'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    order_num: Mapped[str] = mapped_column(String(12))
-    date: Mapped[datetime]
-    state: Mapped[str]
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
-    game_id: Mapped[int] = mapped_column(ForeignKey('games.id'))
-
-    user: Mapped['User'] = relationship(back_populates='orders')
-    game: Mapped['Game'] = relationship(back_populates='order')
+    def __repr__(self):
+        return f'id:{self.id}; name:{self.name}; platform_id:{self.platform_id}; region:{self.region}; price:{self.price}; sealed:{self.sealed}; for_sale:{self.for_sale}'
 
 
-async def create_base():
-    Base.metadata.create_all(bind=engine)
+async def async_main():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
